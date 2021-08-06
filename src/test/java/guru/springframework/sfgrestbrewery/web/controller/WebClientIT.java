@@ -68,7 +68,7 @@ public class WebClientIT {
         CountDownLatch countDownLatch = new CountDownLatch(1);
 
         Mono<BeerDto> beerDtoMono = webClient.get()
-                                             .uri("api/v1/beerUpc/" + BeerLoader.BEER_1_UPC)
+                                             .uri("api/v1/beerUpc/" + BeerLoader.BEER_5_UPC)
                                              .accept(MediaType.APPLICATION_JSON)
                                              .retrieve()
                                              .bodyToMono(BeerDto.class);
@@ -240,6 +240,53 @@ public class WebClientIT {
                  });
 
         countDownLatch.countDown();
+
+        countDownLatch.await(10000, TimeUnit.MILLISECONDS);
+        assertThat(countDownLatch.getCount()).isEqualTo(0);
+    }
+
+    @Test
+    void testDeleteBeer() throws InterruptedException {
+        CountDownLatch countDownLatch = new CountDownLatch(3);
+
+        webClient.get()
+                 .uri("/api/v1/beer")
+                 .retrieve()
+                 .bodyToMono(BeerPagedList.class)
+                 .publishOn(Schedulers.single())
+                 .subscribe(pagedList -> {
+                     countDownLatch.countDown();
+
+                     BeerDto beerDto = pagedList.getContent()
+                                                .get(0);
+
+                     webClient.delete()
+                              .uri("/api/v1/beer/" + beerDto.getId())
+                              .retrieve()
+                              .toBodilessEntity()
+                              .flatMap(responseEntity -> {
+                                  countDownLatch.countDown();
+
+                                  return webClient.get()
+                                                  .uri("/api/v1/beer/" + beerDto.getId())
+                                                  .accept(MediaType.APPLICATION_JSON)
+                                                  .retrieve()
+                                                  .bodyToMono(BeerDto.class);
+                              })
+                              .subscribe(savedDto -> {
+                              }, throwable -> {
+                                  if (throwable.getClass()
+                                               .getName()
+                                               .equals("org.springframework.web.reactive.function.client.WebClientResponseException$NotFound")) {
+                                      WebClientResponseException ex = (WebClientResponseException) throwable;
+                                      if (ex.getStatusCode()
+                                            .equals(HttpStatus.NOT_FOUND)) {
+                                          countDownLatch.countDown();
+                                      }
+                                  }
+                              });
+
+                 });
 
         countDownLatch.await(10000, TimeUnit.MILLISECONDS);
         assertThat(countDownLatch.getCount()).isEqualTo(0);
