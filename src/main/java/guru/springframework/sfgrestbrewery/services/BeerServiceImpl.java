@@ -76,21 +76,29 @@ public class BeerServiceImpl implements BeerService {
 
     @Override
     public Mono<BeerDto> saveNewBeer(BeerDto beerDto) {
-        return beerRepository.save(beerMapper.beerDtoToBeer(beerDto)).map(beerMapper::beerToBeerDto);
+        return beerRepository.save(beerMapper.beerDtoToBeer(beerDto))
+                             .map(beerMapper::beerToBeerDto);
     }
 
     @Override
-    public BeerDto updateBeer(Integer beerId, BeerDto beerDto) {
-//        Beer beer = beerRepository.findById(beerId).orElseThrow(NotFoundException::new);
-//
-//        beer.setBeerName(beerDto.getBeerName());
-//        beer.setBeerStyle(BeerStyleEnum.PILSNER.valueOf(beerDto.getBeerStyle()));
-//        beer.setPrice(beerDto.getPrice());
-//        beer.setUpc(beerDto.getUpc());
-//
-//        return beerMapper.beerToBeerDto(beerRepository.save(beer));
-
-        return null;
+    public Mono<BeerDto> updateBeer(Integer beerId, BeerDto beerDto) {
+        return beerRepository.findById(beerId)
+                             .defaultIfEmpty(Beer.builder()
+                                                 .build())
+                             .map(beer -> {
+                                 beer.setBeerName(beerDto.getBeerName());
+                                 beer.setBeerStyle(BeerStyleEnum.valueOf(beerDto.getBeerStyle()));
+                                 beer.setPrice(beerDto.getPrice());
+                                 beer.setUpc(beerDto.getUpc());
+                                 return beer;
+                             })
+                             .flatMap(updatedBeer -> {
+                                 if(updatedBeer.getId() != null) {
+                                     return beerRepository.save(updatedBeer);
+                                 }
+                                 return Mono.just(updatedBeer);
+                             })
+                             .map(beerMapper::beerToBeerDto);
     }
 
     @Cacheable(cacheNames = "beerUpcCache")
