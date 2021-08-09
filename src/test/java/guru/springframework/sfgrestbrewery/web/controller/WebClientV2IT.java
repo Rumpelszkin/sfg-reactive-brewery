@@ -23,6 +23,7 @@ import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.DEFINED_PORT)
 public class WebClientV2IT {
@@ -180,4 +181,115 @@ public class WebClientV2IT {
         assertThat(countDownLatch.getCount()).isEqualTo(0);
     }
 
+    @Test
+    void testUpdateBeer() throws InterruptedException {
+        final String newBeerName = "New Beer Name";
+        final Integer beerId = 1;
+        CountDownLatch countDownLatch = new CountDownLatch(2);
+
+        webClient.put()
+                 .uri(BeerRouterConfiguration.BEER_V2_URL + "/" + beerId)
+                 .accept(MediaType.APPLICATION_JSON)
+                 .body(BodyInserters.fromValue(BeerDto.builder()
+                                                      .beerName(newBeerName)
+                                                      .upc("1233455")
+                                                      .beerStyle("PALE_ALE")
+                                                      .price(new BigDecimal("10.99"))
+                                                      .build()))
+                 .retrieve()
+                 .toBodilessEntity()
+                 .subscribe(responseEntity -> {
+                     assertThat(responseEntity.getStatusCode()
+                                              .is2xxSuccessful());
+                     countDownLatch.countDown();
+                 });
+        //wait for update
+        countDownLatch.await(500, TimeUnit.MILLISECONDS);
+
+        webClient.get()
+                 .uri(BeerRouterConfiguration.BEER_V2_URL + "/" + beerId)
+                 .accept(MediaType.APPLICATION_JSON)
+                 .retrieve()
+                 .bodyToMono(BeerDto.class)
+                 .subscribe(beer -> {
+                     assertThat(beer).isNotNull();
+                     assertThat(beer.getBeerName()).isNotNull();
+                     assertThat(beer.getBeerName()).isEqualTo(newBeerName);
+                     countDownLatch.countDown();
+                 });
+
+        countDownLatch.await(1000, TimeUnit.MILLISECONDS);
+        assertThat(countDownLatch.getCount()).isEqualTo(0);
+    }
+
+    @Test
+    void testUpdateBeerNotFound() throws InterruptedException {
+        final String newBeerName = "New Beer Name";
+        final Integer beerId = 1000;
+        CountDownLatch countDownLatch = new CountDownLatch(1);
+
+        webClient.put()
+                 .uri(BeerRouterConfiguration.BEER_V2_URL + "/" + beerId)
+                 .accept(MediaType.APPLICATION_JSON)
+                 .body(BodyInserters.fromValue(BeerDto.builder()
+                                                      .beerName(newBeerName)
+                                                      .upc("1233455")
+                                                      .beerStyle("PALE_ALE")
+                                                      .price(new BigDecimal("10.99"))
+                                                      .build()))
+                 .retrieve()
+                 .toBodilessEntity()
+                 .subscribe(responseEntity -> {
+                     assertThat(responseEntity.getStatusCode()
+                                              .is2xxSuccessful());
+                 }, throwable -> {
+                     countDownLatch.countDown();
+                 });
+        //wait for update
+
+        countDownLatch.await(1000, TimeUnit.MILLISECONDS);
+        assertThat(countDownLatch.getCount()).isEqualTo(0);
+    }
+
+    @Test
+    void testDeleteBeerById() throws InterruptedException {
+        Integer beerId = 3;
+        CountDownLatch countDownLatch = new CountDownLatch(2);
+
+        webClient.delete()
+                 .uri(BeerRouterConfiguration.BEER_V2_URL + "/" + beerId)
+                 .retrieve()
+                 .toBodilessEntity()
+                 .flatMap(responseEntity -> {
+                     countDownLatch.countDown();
+
+                     return webClient.get()
+                                     .uri(BeerRouterConfiguration.BEER_V2_URL + "/" + beerId)
+                                     .accept(MediaType.APPLICATION_JSON)
+                                     .retrieve().bodyToMono(BeerDto.class);
+                 }).subscribe(savedDto -> {
+
+        }, throwable -> {
+                     countDownLatch.countDown();
+        });
+
+        countDownLatch.await(1000, TimeUnit.MILLISECONDS);
+        assertThat(countDownLatch.getCount()).isEqualTo(0);
+    }
+
+    @Test
+    void testDeleteBeerByIdNotFound() throws InterruptedException {
+        Integer beerId = 4;
+
+        webClient.delete()
+                 .uri(BeerRouterConfiguration.BEER_V2_URL + "/" + beerId)
+                 .retrieve()
+                 .toBodilessEntity().block();
+        assertThrows(WebClientResponseException.NotFound.class, () -> {
+            webClient.delete()
+                     .uri(BeerRouterConfiguration.BEER_V2_URL + "/" + beerId)
+                     .retrieve()
+                     .toBodilessEntity().block();
+        });
+    }
 }

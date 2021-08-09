@@ -2,6 +2,7 @@ package guru.springframework.sfgrestbrewery.services;
 
 import guru.springframework.sfgrestbrewery.domain.Beer;
 import guru.springframework.sfgrestbrewery.repositories.BeerRepository;
+import guru.springframework.sfgrestbrewery.web.controller.NotFoundException;
 import guru.springframework.sfgrestbrewery.web.mappers.BeerMapper;
 import guru.springframework.sfgrestbrewery.web.model.BeerDto;
 import guru.springframework.sfgrestbrewery.web.model.BeerPagedList;
@@ -120,5 +121,14 @@ public class BeerServiceImpl implements BeerService {
     public void deleteBeerById(Integer beerId) {
         beerRepository.deleteById(beerId)
                       .subscribe();
+    }
+
+    @Override
+    public Mono<Void> reactiveDeleteById(Integer beerId) {
+        return beerRepository.findById(beerId)
+                             .switchIfEmpty(Mono.error(new NotFoundException()))
+                             .map(beer -> {
+                                 return beer.getId();
+                             }).flatMap(foundId -> beerRepository.deleteById(foundId));
     }
 }
